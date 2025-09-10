@@ -2,6 +2,8 @@ import re
 from youtube_transcript_api import YouTubeTranscriptApi, TranscriptsDisabled
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain_openai import OpenAIEmbeddings, ChatOpenAI, AzureOpenAIEmbeddings
+from langchain_core.runnables import RunnableParallel, RunnablePassthrough, RunnableLambda
+from langchain_core.output_parsers import StrOutputParser
 from langchain_community.vectorstores import FAISS
 from langchain_core.prompts import PromptTemplate
 from dotenv import load_dotenv
@@ -18,6 +20,12 @@ def get_video_id(url: str) -> str:
     if not results:
         return None
     return results.group(group)
+
+
+# Format the docs
+def format_docs(retrieved_docs):
+    context_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
+    return context_text
 
 
 def process_video_and_query(video_url: str, question: str):
@@ -49,11 +57,15 @@ def process_video_and_query(video_url: str, question: str):
 
     # Retrieve relevant context for the user query
     retriever = vector_store.as_retriever(search_type="similarity", search_kwargs={"k": 4})
-    retrieved_docs = retriever.invoke(question)
-    context_text = "\n\n".join(doc.page_content for doc in retrieved_docs)
+
+    parallel_chain = RunnableParallel({
+        'context': retriever | RunnableLambda(format_docs),
+        'question': RunnablePassthrough()
+    })
 
     # Model
     model = ChatOpenAI(model="gpt-4o", temperature=0.2)
+    parser = StrOutputParser()
 
     # Prompt
     prompt = PromptTemplate(
@@ -61,17 +73,17 @@ def process_video_and_query(video_url: str, question: str):
         input_variables=["context", "question"]
     )
 
-    final_prompt = prompt.invoke({"context": context_text, "question": question})
-    result = model.invoke(final_prompt)
-    return result.content
+    main_chain = parallel_chain | prompt | model | parser
+    result = main_chain.invoke(question)
+    return result
 
 
 if __name__ == "__main__":
     # Example usage:
-    # video_url = "https://www.youtube.com/watch?v=Gfr50f6ZBvo"
-    video_url = "https://www.youtube.com/watch?v=ry9SYnV3svc"
-    # question = "Is the topic of nuclear fusion discussed in this video? If yes, then what was discussed?"
-    question = "Is the topic of boss is hilarious discussed in this video? If yes, then what was discussed?"
+    video_url = "https://www.youtube.com/watch?v=Gfr50f6ZBvo"
+    # video_url = "https://www.youtube.com/watch?v=ry9SYnV3svc"
+    question = "Is the topic of nuclear fusion discussed in this video? If yes, then what was discussed?"
+    # question = "Is the topic of boss is hilarious discussed in this video? If yes, then what was discussed?"
     result = process_video_and_query(video_url, question)
     if result:
         print(result)
