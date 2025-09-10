@@ -45,8 +45,8 @@ This project allows you to extract transcripts from YouTube videos and answer qu
 
 ```python
 if __name__ == "__main__":
-    video_url = "https://www.youtube.com/watch?v=ry9SYnV3svc"
-    question = "Is the topic of boss is hilarious discussed in this video? If yes, then what was discussed?"
+    video_url = "https://www.youtube.com/watch?v=Gfr50f6ZBvo"
+    question = "Is the topic of nuclear fusion discussed in this video? If yes, then what was discussed?"
     result = process_video_and_query(video_url, question)
     if result:
         print(result)
